@@ -7,6 +7,7 @@ from roast_generator import generate_roast, generate_demotion_roast
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
+FRIENDS_PATH = os.path.join(SCRIPT_DIR, "friends.json")
 PROCESSED_PATH = os.path.join(SCRIPT_DIR, "processed_matches.json")
 RANKS_PATH = os.path.join(SCRIPT_DIR, "ranks.json")
 MAX_STORED_MATCHES = 50
@@ -30,6 +31,10 @@ def load_config():
     config["riot_api_key"] = os.environ.get("RIOT_API_KEY", config.get("riot_api_key", ""))
     config["discord_webhook_url"] = os.environ.get("DISCORD_WEBHOOK_URL", config.get("discord_webhook_url", ""))
     config["gemini_api_key"] = os.environ.get("GEMINI_API_KEY", config.get("gemini_api_key", ""))
+    # Load friends from friends.json (committed to repo, no secrets)
+    if os.path.exists(FRIENDS_PATH):
+        with open(FRIENDS_PATH) as f:
+            config["friends"] = json.load(f)
     return config
 
 
