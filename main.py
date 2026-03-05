@@ -1,5 +1,4 @@
 import json
-import time
 import os
 
 from riot_api import get_puuid, get_recent_match_ids, get_match_details, get_ranked_entries
@@ -23,8 +22,15 @@ QUEUE_NAMES = {
 
 
 def load_config():
-    with open(CONFIG_PATH) as f:
-        return json.load(f)
+    config = {}
+    if os.path.exists(CONFIG_PATH):
+        with open(CONFIG_PATH) as f:
+            config = json.load(f)
+    # Env vars override config.json (used in GitHub Actions)
+    config["riot_api_key"] = os.environ.get("RIOT_API_KEY", config.get("riot_api_key", ""))
+    config["discord_webhook_url"] = os.environ.get("DISCORD_WEBHOOK_URL", config.get("discord_webhook_url", ""))
+    config["gemini_api_key"] = os.environ.get("GEMINI_API_KEY", config.get("gemini_api_key", ""))
+    return config
 
 
 def load_processed():
@@ -52,26 +58,22 @@ def save_ranks(data):
 
 
 def rank_value(tier, division):
-    """Convert tier + division to a numeric value for comparison."""
     t = TIER_ORDER.index(tier) if tier in TIER_ORDER else -1
     d = DIVISION_ORDER.index(division) if division in DIVISION_ORDER else 0
     return t * 4 + d
 
 
 def format_rank(tier, division):
-    """Format rank as e.g. 'Gold 2'."""
     return f"{tier.capitalize()} {division}"
 
 
 def check_demotions(puuid, display_name, api_key, webhook_url, gemini_key, stored_ranks):
-    """Check if a player demoted in any ranked queue."""
     entries = get_ranked_entries(puuid, api_key)
     if not entries:
         return
 
-    player_key = puuid
-    if player_key not in stored_ranks:
-        stored_ranks[player_key] = {}
+    if puuid not in stored_ranks:
+        stored_ranks[puuid] = {}
 
     for entry in entries:
         queue = entry.get("queueType", "")
@@ -84,27 +86,21 @@ def check_demotions(puuid, display_name, api_key, webhook_url, gemini_key, store
         current_rank = format_rank(tier, division)
         current_value = rank_value(tier, division)
 
-        if queue in stored_ranks[player_key]:
-            prev = stored_ranks[player_key][queue]
+        if queue in stored_ranks[puuid]:
+            prev = stored_ranks[puuid][queue]
             prev_value = rank_value(prev["tier"], prev["division"])
-
             if current_value < prev_value:
                 old_rank = format_rank(prev["tier"], prev["division"])
                 game_name = display_name.split("#")[0]
-                roast = generate_demotion_roast(
-                    game_name, old_rank, current_rank, queue_name, gemini_key,
-                )
-                sent = send_demotion_message(
-                    webhook_url, display_name, old_rank, current_rank, queue_name, roast,
-                )
+                roast = generate_demotion_roast(game_name, old_rank, current_rank, queue_name, gemini_key)
+                sent = send_demotion_message(webhook_url, display_name, old_rank, current_rank, queue_name, roast)
                 status = "SENT" if sent else "FAILED"
                 print(f"[DEMOTION {status}] {display_name} - {queue_name}: {old_rank} -> {current_rank}")
 
-        stored_ranks[player_key][queue] = {"tier": tier, "division": division}
+        stored_ranks[puuid][queue] = {"tier": tier, "division": division}
 
 
 def extract_player_stats(match_data, puuid):
-    """Extract K/D/A and champion for the given player from match data."""
     for participant in match_data.get("info", {}).get("participants", []):
         if participant.get("puuid") == puuid:
             return {
@@ -129,16 +125,15 @@ def main():
     api_key = config["riot_api_key"]
     webhook_url = config["discord_webhook_url"]
     gemini_key = config["gemini_api_key"]
-    poll_interval = config.get("poll_interval_seconds", 60)
-    kda_threshold = config.get("kda_threshold", 1.0)
+    kda_threshold = config.get("kda_threshold", 1.5)
     match_count = config.get("match_count", 5)
 
     # Resolve all friends' Riot IDs to PUUIDs
-    friends = {}  # {puuid: "GameName#Tag"}
+    friends = {}
     for riot_id in config["friends"]:
         parts = riot_id.split("#", 1)
         if len(parts) != 2:
-            print(f"Invalid Riot ID format: {riot_id} (expected Name#Tag)")
+            print(f"Invalid Riot ID format: {riot_id}")
             continue
         game_name, tag_line = parts
         puuid = get_puuid(game_name, tag_line, api_key)
@@ -154,80 +149,46 @@ def main():
         print("No friends resolved. Check your config and API key.")
         return
 
-    print(f"\nTracking {len(friends)} friend(s). Polling every {poll_interval}s. KDA threshold: {kda_threshold}")
-    print("Press Ctrl+C to stop.\n")
+    # Check matches
+    for puuid, display_name in friends.items():
+        match_ids = get_recent_match_ids(puuid, api_key, match_count)
+        new_ids = [m for m in match_ids if m not in processed.get(puuid, [])]
 
-    try:
-        while True:
-            for puuid, display_name in friends.items():
-                match_ids = get_recent_match_ids(puuid, api_key, match_count)
-                if not match_ids:
-                    continue
+        for match_id in new_ids:
+            match_data = get_match_details(match_id, api_key)
+            if not match_data:
+                continue
 
-                new_ids = [m for m in match_ids if m not in processed.get(puuid, [])]
-                for match_id in new_ids:
-                    match_data = get_match_details(match_id, api_key)
-                    if not match_data:
-                        continue
+            if match_data.get("info", {}).get("gameDuration", 0) < MIN_GAME_DURATION_SECONDS:
+                processed[puuid].append(match_id)
+                continue
 
-                    # Skip remakes
-                    game_duration = match_data.get("info", {}).get("gameDuration", 0)
-                    if game_duration < MIN_GAME_DURATION_SECONDS:
-                        processed[puuid].append(match_id)
-                        continue
+            stats = extract_player_stats(match_data, puuid)
+            if not stats:
+                processed[puuid].append(match_id)
+                continue
 
-                    stats = extract_player_stats(match_data, puuid)
-                    if not stats:
-                        processed[puuid].append(match_id)
-                        continue
+            kda = calculate_kda(stats["kills"], stats["deaths"], stats["assists"])
+            processed[puuid].append(match_id)
 
-                    kda = calculate_kda(stats["kills"], stats["deaths"], stats["assists"])
+            if kda < kda_threshold:
+                game_name = display_name.split("#")[0]
+                roast = generate_roast(game_name, stats["championName"], stats["kills"], stats["deaths"], stats["assists"], gemini_key)
+                sent = send_shame_message(webhook_url, display_name, stats["championName"], stats["kills"], stats["deaths"], stats["assists"], kda, roast)
+                status = "SENT" if sent else "FAILED"
+                print(f"[SHAME {status}] {display_name} - {stats['championName']} {stats['kills']}/{stats['deaths']}/{stats['assists']} (KDA: {kda:.2f})")
+            else:
+                print(f"[OK] {display_name} - {stats['championName']} {stats['kills']}/{stats['deaths']}/{stats['assists']} (KDA: {kda:.2f})")
 
-                    # Mark as processed regardless of KDA
-                    processed[puuid].append(match_id)
+        processed[puuid] = processed[puuid][-MAX_STORED_MATCHES:]
 
-                    if kda < kda_threshold:
-                        game_name = display_name.split("#")[0]
-                        roast = generate_roast(
-                            game_name,
-                            stats["championName"],
-                            stats["kills"],
-                            stats["deaths"],
-                            stats["assists"],
-                            gemini_key,
-                        )
-                        sent = send_shame_message(
-                            webhook_url,
-                            display_name,
-                            stats["championName"],
-                            stats["kills"],
-                            stats["deaths"],
-                            stats["assists"],
-                            kda,
-                            roast,
-                        )
-                        status = "SENT" if sent else "FAILED"
-                        print(f"[SHAME {status}] {display_name} - {stats['championName']} "
-                              f"{stats['kills']}/{stats['deaths']}/{stats['assists']} (KDA: {kda:.2f})")
-                    else:
-                        print(f"[OK] {display_name} - {stats['championName']} "
-                              f"{stats['kills']}/{stats['deaths']}/{stats['assists']} (KDA: {kda:.2f})")
+    # Check rank demotions
+    for puuid, display_name in friends.items():
+        check_demotions(puuid, display_name, api_key, webhook_url, gemini_key, stored_ranks)
 
-                # Prune old entries
-                processed[puuid] = processed[puuid][-MAX_STORED_MATCHES:]
-
-            # Check for rank demotions
-            for puuid, display_name in friends.items():
-                check_demotions(puuid, display_name, api_key, webhook_url, gemini_key, stored_ranks)
-
-            save_processed(processed)
-            save_ranks(stored_ranks)
-            time.sleep(poll_interval)
-
-    except KeyboardInterrupt:
-        print("\nStopping LoL Shamer. Your friends are safe... for now.")
-        save_processed(processed)
-        save_ranks(stored_ranks)
+    save_processed(processed)
+    save_ranks(stored_ranks)
+    print("Done.")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,40 @@
+name: LoL Shamer
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"  # every 5 minutes
+  workflow_dispatch:         # allow manual trigger from GitHub UI
+
+jobs:
+  shame:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # needed to commit state files back
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run LoL Shamer
+        env:
+          RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python main.py
+
+      - name: Save state files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add processed_matches.json ranks.json 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "chore: update state [skip ci]"
+          git push
