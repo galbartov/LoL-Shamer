@@ -1,1 +1,40 @@
-{}
+{
+  "jEp8IiKd0ut4tM8hFoKk-CW7aZDv4rLVqIVixp7MKpoHGrJsXN1zMcGn_bqbHeReIsH_06wkbcg0JA": {
+    "RANKED_SOLO_5x5": {
+      "tier": "GOLD",
+      "division": "III"
+    }
+  },
+  "HVOyzMmHrLeMrBslmjz3wZ4CWz0s9EQCbgIKA__Q8JZeBKVNbZqLPx5lQreKPV9sbV8XWuc51cX2DQ": {
+    "RANKED_SOLO_5x5": {
+      "tier": "EMERALD",
+      "division": "I"
+    }
+  },
+  "AgQDWG7IunR7ZHv7qmfRaODjGMBS9qSa3SOStZ6PbHeRf8b-Q9B0mOjEvSVajefL1z86Ja_IPu2tJw": {
+    "RANKED_SOLO_5x5": {
+      "tier": "DIAMOND",
+      "division": "IV"
+    },
+    "RANKED_FLEX_SR": {
+      "tier": "DIAMOND",
+      "division": "II"
+    }
+  },
+  "z9pQSTIQ5Fftpl5gtf9BoDpIh_w_rl3N0A5xPpVCzwOEmplwR_t3kCssAI3ha2GnUP6MUbTUl_2EGQ": {
+    "RANKED_SOLO_5x5": {
+      "tier": "PLATINUM",
+      "division": "III"
+    },
+    "RANKED_FLEX_SR": {
+      "tier": "PLATINUM",
+      "division": "III"
+    }
+  },
+  "fjt2iLqGqZUcAyHv94plBZ3PzRh3P4TWENxTcHo_N_LrYVXPU3gZmTTG3z4pIYh99a6Iosk8xGV1vA": {
+    "RANKED_SOLO_5x5": {
+      "tier": "GOLD",
+      "division": "II"
+    }
+  }
+}
