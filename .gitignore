@@ -1,0 +1,7 @@
+config.json
+processed_matches.json
+ranks.json
+__pycache__/
+*.pyc
+.env
+venv/

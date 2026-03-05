@@ -1,0 +1,12 @@
+{
+  "riot_api_key": "RGAPI-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "discord_webhook_url": "https://discord.com/api/webhooks/YOUR_WEBHOOK_URL",
+  "gemini_api_key": "YOUR_GEMINI_API_KEY",
+  "friends": [
+    "PlayerOne#EUNE",
+    "PlayerTwo#1234"
+  ],
+  "poll_interval_seconds": 60,
+  "kda_threshold": 1.5,
+  "match_count": 5
+}
