@@ -145,8 +145,13 @@ def main():
         if puuid:
             friends[puuid] = riot_id
             if puuid not in processed:
-                processed[puuid] = []
-            print(f"Resolved {riot_id} -> {puuid[:8]}...")
+                # First time seeing this player: mark all existing matches as processed
+                # so we only shame games played from this point forward
+                existing = get_recent_match_ids(puuid, api_key, match_count)
+                processed[puuid] = list(existing)
+                print(f"Resolved {riot_id} -> {puuid[:8]}... (seeded {len(existing)} existing matches)")
+            else:
+                print(f"Resolved {riot_id} -> {puuid[:8]}...")
         else:
             print(f"Failed to resolve {riot_id}")
 
